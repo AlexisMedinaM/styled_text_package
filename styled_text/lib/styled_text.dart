@@ -121,11 +121,14 @@ class StyledText extends StatefulWidget {
   /// {@macro flutter.dart:ui.textHeightBehavior}
   final ui.TextHeightBehavior? textHeightBehavior;
 
+  final BuildContext buildContext;
+
   /// Create a text widget with formatting via tags.
   ///
   StyledText({
     Key? key,
     required this.text,
+    required this.buildContext,
     this.newLineAsBreaks = true,
     this.style,
     Map<String, StyledTextTagBase>? tags,
@@ -161,6 +164,7 @@ class StyledText extends StatefulWidget {
   StyledText.selectable({
     Key? key,
     required this.text,
+    required this.buildContext,
     this.newLineAsBreaks = false,
     this.style,
     Map<String, StyledTextTagBase>? tags,
@@ -221,6 +225,147 @@ class StyledText extends StatefulWidget {
 
   @override
   _StyledTextState createState() => _StyledTextState();
+
+  String? _text;
+  TextSpan? _textSpans;
+  _Node? _rootNode;
+
+  void handleStyledTextToRichText(Function(RichText) onComplete) {
+    _updateTextSpans(onComplete, force: true);
+  }
+
+  void _updateTextSpans(Function(RichText) onComplete, {bool force = false}) {
+
+    if ((_text != text) || (_textSpans == null) || force) {
+      _text = text;
+
+      String? textValue = _text;
+      if (textValue == null) return;
+
+      if (newLineAsBreaks) {
+        textValue = textValue.replaceAll("\n", '<br/>');
+      }
+
+      _rootNode?.dispose();
+      _Node node = _TextNode();
+      ListQueue<_Node> textQueue = ListQueue();
+      Map<String?, String?>? attributes;
+
+      final xmlStreamer = XmlStreamer(
+        '<?xml version="1.0" encoding="UTF-8"?><root>' + textValue + '</root>',
+        trimSpaces: false,
+      );
+      xmlStreamer.read().listen((e) {
+        switch (e.state) {
+          case XmlState.Text:
+          case XmlState.CDATA:
+            node.children.add(
+              _TextNode(text: e.value),
+            );
+            break;
+
+          case XmlState.Open:
+            textQueue.addLast(node);
+
+            if (e.value == 'br') {
+              node = _TextNode(text: "\n");
+            } else {
+              StyledTextTagBase? tag = _tag(e.value);
+              node = _TagNode(tag: tag);
+              attributes = {};
+            }
+
+            break;
+
+          case XmlState.Closed:
+            node.configure(attributes);
+
+            if (textQueue.isNotEmpty) {
+              final _Node child = node;
+              node = textQueue.removeLast();
+              node.children.add(child);
+            }
+
+            break;
+
+          case XmlState.Attribute:
+            if (e.key != null && attributes != null) {
+              attributes![e.key] = e.value;
+            }
+            break;
+
+          case XmlState.Comment:
+          case XmlState.StartDocument:
+          case XmlState.EndDocument:
+          case XmlState.Namespace:
+          case XmlState.Top:
+            break;
+        }
+      }).onDone(() {
+        _rootNode = node;
+        _buildTextSpans(_rootNode, onComplete);
+      });
+    } else {
+      if (_rootNode != null && _textSpans == null) {
+        _buildTextSpans(_rootNode, onComplete);
+      }
+    }
+  }
+
+  StyledTextTagBase? _tag(String? tagName) {
+    if (tagName == null) return null;
+
+    if (tags.containsKey(tagName)) {
+      return tags[tagName];
+    }
+
+    return null;
+  }
+
+  void _buildTextSpans(_Node? node, Function(RichText) onComplete) {
+    if (node != null) {
+        final span = node.createSpan(context: buildContext);
+        _textSpans = TextSpan(children: [span]);
+
+
+        final DefaultTextStyle defaultTextStyle = DefaultTextStyle.of(buildContext);
+        TextStyle? effectiveTextStyle = style;
+        if (style == null || style!.inherit)
+          effectiveTextStyle = defaultTextStyle.style.merge(style);
+        if (MediaQuery.boldTextOverride(buildContext))
+          effectiveTextStyle = effectiveTextStyle!
+              .merge(const TextStyle(fontWeight: FontWeight.bold));
+
+        final textSpan = TextSpan(
+          style: effectiveTextStyle,
+          children: [_textSpans!],
+        );
+
+        onComplete(
+          RichText(
+            textAlign:
+                textAlign ?? defaultTextStyle.textAlign ?? TextAlign.start,
+            textDirection: textDirection,
+            softWrap: softWrap ?? defaultTextStyle.softWrap,
+            overflow: overflow ??
+                effectiveTextStyle?.overflow ??
+                defaultTextStyle.overflow,
+            textScaleFactor:
+                textScaleFactor ?? MediaQuery.textScaleFactorOf(buildContext),
+            maxLines: maxLines ?? defaultTextStyle.maxLines,
+            locale: locale,
+            strutStyle: strutStyle,
+            textWidthBasis:
+                textWidthBasis ?? defaultTextStyle.textWidthBasis,
+            textHeightBehavior: textHeightBehavior ??
+                defaultTextStyle.textHeightBehavior ??
+                DefaultTextHeightBehavior.of(buildContext),
+            text: textSpan,
+          )
+        );
+    }
+  }
+
 }
 
 class _StyledTextState extends State<StyledText> {
