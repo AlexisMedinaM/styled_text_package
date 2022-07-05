@@ -60,7 +60,7 @@ class StyledText extends StatefulWidget {
   final bool selectable;
 
   /// Default text style.
-  final TextStyle? style;
+  final TextStyle style;
 
   /// Map of tag assignments to text style classes and tag handlers.
   ///
@@ -129,8 +129,8 @@ class StyledText extends StatefulWidget {
     Key? key,
     required this.text,
     required this.buildContext,
+    required this.style,
     this.newLineAsBreaks = true,
-    this.style,
     Map<String, StyledTextTagBase>? tags,
     this.textAlign,
     this.textDirection,
@@ -165,8 +165,8 @@ class StyledText extends StatefulWidget {
     Key? key,
     required this.text,
     required this.buildContext,
+    required this.style,
     this.newLineAsBreaks = false,
-    this.style,
     Map<String, StyledTextTagBase>? tags,
     this.textAlign,
     this.textDirection,
@@ -327,39 +327,26 @@ class StyledText extends StatefulWidget {
         final span = node.createSpan(context: buildContext);
         _textSpans = TextSpan(children: [span]);
 
-
-        final DefaultTextStyle defaultTextStyle = DefaultTextStyle.of(buildContext);
-        TextStyle? effectiveTextStyle = style;
-        if (style == null || style!.inherit)
-          effectiveTextStyle = defaultTextStyle.style.merge(style);
-        if (MediaQuery.boldTextOverride(buildContext))
-          effectiveTextStyle = effectiveTextStyle!
-              .merge(const TextStyle(fontWeight: FontWeight.bold));
-
         final textSpan = TextSpan(
-          style: effectiveTextStyle,
+          style: style,
           children: [_textSpans!],
         );
 
         onComplete(
           RichText(
             textAlign:
-                textAlign ?? defaultTextStyle.textAlign ?? TextAlign.start,
+                textAlign ?? TextAlign.start,
             textDirection: textDirection,
-            softWrap: softWrap ?? defaultTextStyle.softWrap,
-            overflow: overflow ??
-                effectiveTextStyle?.overflow ??
-                defaultTextStyle.overflow,
+            softWrap: softWrap ?? true,
+            overflow: overflow ?? TextOverflow.clip,
             textScaleFactor:
-                textScaleFactor ?? MediaQuery.textScaleFactorOf(buildContext),
-            maxLines: maxLines ?? defaultTextStyle.maxLines,
+                textScaleFactor ?? 1.0,
+            maxLines: maxLines,
             locale: locale,
             strutStyle: strutStyle,
             textWidthBasis:
-                textWidthBasis ?? defaultTextStyle.textWidthBasis,
-            textHeightBehavior: textHeightBehavior ??
-                defaultTextStyle.textHeightBehavior ??
-                DefaultTextHeightBehavior.of(buildContext),
+                textWidthBasis ?? TextWidthBasis.parent,
+            textHeightBehavior: textHeightBehavior,
             text: textSpan,
           )
         );
@@ -498,11 +485,11 @@ class _StyledTextState extends State<StyledText> {
     if (_textSpans == null) return const SizedBox();
 
     final DefaultTextStyle defaultTextStyle = DefaultTextStyle.of(context);
-    TextStyle? effectiveTextStyle = widget.style;
-    if (widget.style == null || widget.style!.inherit)
+    TextStyle effectiveTextStyle = widget.style;
+    if (widget.style.inherit)
       effectiveTextStyle = defaultTextStyle.style.merge(widget.style);
     if (MediaQuery.boldTextOverride(context))
-      effectiveTextStyle = effectiveTextStyle!
+      effectiveTextStyle = effectiveTextStyle
           .merge(const TextStyle(fontWeight: FontWeight.bold));
 
     final span = TextSpan(
@@ -517,7 +504,7 @@ class _StyledTextState extends State<StyledText> {
         textDirection: widget.textDirection,
         softWrap: widget.softWrap ?? defaultTextStyle.softWrap,
         overflow: widget.overflow ??
-            effectiveTextStyle?.overflow ??
+            effectiveTextStyle.overflow ??
             defaultTextStyle.overflow,
         textScaleFactor:
             widget.textScaleFactor ?? MediaQuery.textScaleFactorOf(context),
